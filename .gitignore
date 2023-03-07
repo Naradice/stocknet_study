@@ -1,2 +1,6 @@
 /.ipynb_checkpoints
 sandbox.ipynb
+*.torch
+*.png
+/Models/Data
+__pycache__/
