@@ -1,0 +1,3 @@
+[submodule "fprocess"]
+	path = fprocess
+	url = https://github.com/Naradice/finance_process.git
