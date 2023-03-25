@@ -1,67 +1,65 @@
-from multiprocessing import Pool
+# from multiprocessing import Pool
+import os
 import random
+import sys
+from collections.abc import Iterable
 
 import numpy as np
+import pandas as pd
 import torch
 
+module_path = os.path.abspath("../fprocess")
+sys.path.append(module_path)
 
-class DataFrameDataset:
-    """
-    Common Dataset for DataFrame source
-    return src, tgt
-    src: (observation_length, batch_size, feature_size)
-    tgt: (prediction_length, batch_size, feature_size)
+import fprocess
 
-    feature_size depends on columns size
-    """
 
+class Dataset:
     version = 8
 
     def __init__(
         self,
         df,
-        observation_length: int = 30,
-        prediction_length=1,
+        columns: list,
+        observation_length: int = 60,
         device="cuda",
-        initial_process=None,
-        in_columns=None,
-        out_columns=None,
-        grouped_by_symbol=True,
+        processes=None,
+        prediction_length=10,
+        seed=1017,
         is_training=True,
         randomize=True,
-        num_worker=1,
-        seed=1017,
     ):
         self.seed(seed)
-        self.num_worker = num_worker
         self.mm_params = {}
-        for process in initial_process:
-            df = process.run(df)
+        data = df[columns]
+        self.org_data = data
+        min_length = [1]
+        for process in processes:
+            data = process(data)
+            min_length.append(process.get_minimum_required_length())
+        self.processes = processes
+
+        self._min_index = max(min_length) - 1
+        if self._min_index < 0:
+            self._min_index = 0
+
         self.observation_length = observation_length
-        self.predition_length = prediction_length
         self.is_training = is_training
         self.device = device
-        self._data = df
-
-        self.in_columns = df.columns
-        if in_columns:
-            self._columns = df.columns
-        self.out_columns = df.columns
-        if out_columns:
-            self.out_columns = out_columns
-        self._init_indicies(df, randomize)
+        self._data = data
+        self._columns = columns
+        self._prediction_length = prediction_length
+        self._init_indicies(data, randomize)
 
     def _init_indicies(self, data, randomize=False, split_ratio=0.7):
-        length = len(data) - self.observation_length - self.predition_length
+        length = len(data) - self.observation_length - self._prediction_length
         if length <= 0:
-            raise Exception(
-                f"date length {length} is less than observation_length {self.observation_length}"
-            )
+            raise Exception(f"date length {length} is less than observation_length {self.observation_length}")
 
         # stopped from v7. As input data inluceds target data
         # indices = random.sample(range(1, length), k=length-1)
 
-        from_index = 1
+        from_index = self._min_index
         to_index = int(length * split_ratio)
         train_indices = list(range(from_index, to_index))
         if randomize:
@@ -70,9 +68,7 @@ class DataFrameDataset:
             self.train_indices = train_indices
 
         # Note: If unique value exits in validation data only, validation loss would be grater than expected
-        from_index = (
-            int(length * split_ratio) + self.observation_length + self.predition_length
-        )
+        from_index = int(length * split_ratio) + self.observation_length + self._prediction_length
         to_index = length
         eval_indices = list(range(from_index, to_index))
         if randomize:
@@ -85,53 +81,45 @@ class DataFrameDataset:
         else:
             self._indices = self.eval_indices
 
-    def __get_single_output(self, index):
-        return (
-            self._data[self.out_columns]
-            .iloc[
-                index
-                + self.observation_length : index
-                + self.observation_length
-                + self.predition_length
-            ]
-            .values.tolist()
-        )
+    def _output_indices(self, index):
+        return slice(index + self.observation_length, index + self.observation_length + self._prediction_length)
 
     def _output_func(self, batch_size):
         if type(batch_size) == int:
             index = self._indices[batch_size]
-            ans = self.__get_single_output(index)
+            ndx = self._output_indices(index)
+            ans = self._data[self._columns].iloc[ndx].values.tolist()
             ans = torch.tensor(ans, device=self.device, dtype=torch.float)
-            ans = ans.reshape(len(self.out_columns), 1, self.predition_length + 1)
-            return ans.transpose(0, 2)
+            ans = ans.reshape(len(self._columns), 1, self._prediction_length + 1)
+            return ans
         elif type(batch_size) == slice:
             batch_indices = batch_size
             chunk_data = []
-            with Pool(processes=4) as p:
-                chunk_data = p.map(
-                    self.__get_single_output, self._indices[batch_indices]
-                )
+            for index in self._indices[batch_indices]:
+                ndx = self._output_indices(index)
+                chunk_data.append(self._data[self._columns].iloc[ndx].values.tolist())
 
-            return torch.tensor(chunk_data, device=self.device, dtype=torch.float)
+            return torch.tensor(chunk_data, device=self.device, dtype=torch.float).transpose(0, 1)
 
-    def __get_single_input(self, index):
-        return self._data[self.in_columns][
-            index : index + self.observation_length
-        ].values.tolist()
+    def _input_indices(self, index):
+        return slice(index, index + self.observation_length)
 
     def _input_func(self, batch_size):
         if type(batch_size) == int:
             index = self._indices[batch_size]
-            src = self.__get_single_input(index)
+            ndx = self._input_indices(index)
+            src = self._data[ndx].values.tolist()
             src = torch.tensor(src, device=self.device, dtype=torch.float)
             src = src.reshape(len(self._columns), 1, self.observation_length)
             return src
         elif type(batch_size) == slice:
+            batch_indices = batch_size
             chunk_src = []
-            with Pool(processes=4) as p:
-                chunk_src = p.map(self.__get_single_input, self._indices[batch_size])
+            for index in self._indices[batch_indices]:
+                ndx = self._input_indices(index)
+                chunk_src.append(self._data[self._columns].iloc[ndx].values.tolist())
 
-            return torch.tensor(chunk_src, device=self.device, dtype=torch.float)
+            return torch.tensor(chunk_src, device=self.device, dtype=torch.float).transpose(0, 1)
 
     def __len__(self):
         return len(self._indices)
@@ -171,10 +159,13 @@ class DataFrameDataset:
     def get_actual_index(self, ndx):
         inputs = []
         if type(ndx) == slice:
-            for index in self._indices[ndx]:
-                inputs.append(index)
-        else:
             inputs = self._indices[ndx]
+        elif isinstance(ndx, Iterable):
+            for index in ndx:
+                inputs.append(self._indices[index])
+        else:
+            return self._indices[ndx]
+
         return inputs
 
     def get_row_data(self, ndx):
@@ -187,3 +178,68 @@ class DataFrameDataset:
             index = ndx
             inputs = df = self._data[index : index + self.observation_length]
         return inputs
+
+    def revert(self, values, ndx, is_tgt=False):
+        r_data = values
+        indices = self.get_actual_index(ndx)
+        if is_tgt:
+            tgt_indices = []
+            for __index in indices:
+                ndx = self._output_indices(__index)
+                tgt_indices.append(ndx.start)
+            indices = tgt_indices
+        for p_index in range(len(self.processes)):
+            r_index = len(self.processes) - 1 - p_index
+            process = self.processes[r_index]
+            params = process.revert_params
+            if len(params) == 1:
+                r_data = process.revert(r_data)
+            else:
+                params = {}
+                if process.kinds == fprocess.MinMaxPreProcess.kinds:
+                    r_data = process.revert(r_data)
+                elif process.kinds == fprocess.SimpleColumnDiffPreProcess.kinds:
+                    close_column = process.base_column
+                    if p_index > 0:
+                        processes = self.processes[:p_index]
+                        required_length = [1]
+                        base_processes = []
+                        for base_process in processes:
+                            if close_column in base_process.columns:
+                                base_processes.append(base_process)
+                                required_length.append(base_process.get_minimum_required_length())
+                        if len(base_processes) > 0:
+                            raise Exception("Not implemented yet")
+                    base_indices = [index - 1 for index in indices]
+                    base_values = self.org_data[close_column].iloc[base_indices]
+                    r_data = process.revert(r_data, base_value=base_values)
+                elif process.kinds == fprocess.DiffPreProcess.kinds:
+                    target_columns = process.columns
+                    if p_index > 0:
+                        processes = self.processes[:p_index]
+                        required_length = [process.get_minimum_required_length()]
+                        base_processes = []
+                        for base_process in processes:
+                            if len(set(target_columns) & set(base_process.columns)) > 0:
+                                base_processes.append(base_process)
+                                required_length.append(base_process.get_minimum_required_length())
+                        if len(base_processes) > 0:
+                            required_length = max(required_length)
+                            batch_base_indices = [index - required_length for index in indices]
+                            batch_base_values = pd.DataFrame()
+                            for index in batch_base_indices:
+                                target_data = self.org_data[target_columns].iloc[index : index + required_length]
+                                for base_process in base_processes:
+                                    target_data = base_process(target_data)
+                                batch_base_values = pd.concat([batch_base_values, target_data.iloc[-1:]], axis=0)
+                            batch_base_values = batch_base_values.values.reshape(1, *batch_base_values.shape)
+                        else:
+                            base_indices = [index - 1 for index in indices]
+                            batch_base_values = self.org_data[target_columns].iloc[base_indices]
+                    else:
+                        base_indices = [index - 1 for index in indices]
+                        batch_base_values = self.org_data[target_columns].iloc[base_indices]
+                    r_data = process.revert(r_data, base_values=batch_base_values)
+                else:
+                    raise Exception(f"Not implemented: {process.kinds}")
+        return r_data
