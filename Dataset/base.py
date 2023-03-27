@@ -89,8 +89,7 @@ class Dataset:
             index = self._indices[batch_size]
             ndx = self._output_indices(index)
             ans = self._data[self._columns].iloc[ndx].values.tolist()
-            ans = torch.tensor(ans, device=self.device, dtype=torch.float)
-            ans = ans.reshape(len(self._columns), 1, self._prediction_length + 1)
+            ans = ans.reshape(self._prediction_length + 1, 1, len(self._columns))
             return ans
         elif type(batch_size) == slice:
             batch_indices = batch_size
@@ -110,7 +109,7 @@ class Dataset:
             ndx = self._input_indices(index)
             src = self._data[ndx].values.tolist()
             src = torch.tensor(src, device=self.device, dtype=torch.float)
-            src = src.reshape(len(self._columns), 1, self.observation_length)
+            src = src.reshape(self.observation_length, 1, len(self._columns))
             return src
         elif type(batch_size) == slice:
             batch_indices = batch_size
@@ -243,3 +242,90 @@ class Dataset:
                 else:
                     raise Exception(f"Not implemented: {process.kinds}")
         return r_data
+
+
+class TimeDataset(Dataset):
+    def __init__(
+        self,
+        df,
+        columns: list,
+        processes,
+        time_column="index",
+        observation_length: int = 60,
+        device="cuda",
+        prediction_length=10,
+        seed=1017,
+        is_training=True,
+        randomize=True,
+    ):
+        """return time data in addition to the columns data
+        ((observation_length, CHUNK_SIZE, NUM_FEATURES), ((prediction_length, CHUNK_SIZE, 1)) as (feature_data, time_data) for source and target
+        Args:
+            df (pd.DataFrame): _description_
+            columns (list): target columns like ["open", "high", "low", "close", "volume"]
+            processes (list): list of process to add indicater and/or run standalization
+            time_column (str, optional): specify column name or index. Defaults to "index"
+            observation_length (int, optional): specify observation_length for source data. Defaults to 60.
+            device (str, optional): Defaults to "cuda".
+            prediction_length (int, optional): specify prediction_length for target data. Defaults to 10.
+            seed (int, optional): specify random seed. Defaults to 1017.
+            is_training (bool, optional): specify training mode or not. Defaults to True.
+            randomize (bool, optional): specify randomize the index or not. Defaults to True.
+        """
+        if time_column == "index" and isinstance(df.index, pd.DatetimeIndex):
+            self.time_column = "index"
+        else:
+            self.time_column = time_column
+            columns += self.time_column
+
+        super().__init__(df, columns, observation_length, device, processes, prediction_length, seed, is_training, randomize)
+
+    def _output_func(self, batch_size):
+        if type(batch_size) == int:
+            index = self._indices[batch_size]
+            ndx = self._output_indices(index)
+            ans = self._data[self._columns].iloc[ndx].values.tolist()
+            ans = torch.tensor(ans, device=self.device, dtype=torch.float)
+            ans.reshape(self._prediction_length, 1, len(self._columns))
+            time = self._data[self.time_column].iloc[ndx].values.tolist()
+            time = torch.tensor(time, device=self.device, dtype=torch.int)
+            time = time.reshape(self._prediction_length, 1, len(self.time_column))
+            return ans, time
+        elif type(batch_size) == slice:
+            batch_indices = batch_size
+            chunk_data = []
+            time_chunk_data = []
+            for index in self._indices[batch_indices]:
+                ndx = self._output_indices(index)
+                chunk_data.append(self._data[self._columns].iloc[ndx].values.tolist())
+                time_chunk_data.append(self._data[self.time_column].iloc[ndx].values.tolist())
+
+            return (
+                torch.tensor(chunk_data, device=self.device, dtype=torch.float).transpose(0, 1),
+                torch.tensor(time_chunk_data, device=self.device, dtype=torch.int).transpose(0, 1),
+            )
+
+    def _input_func(self, batch_size):
+        if type(batch_size) == int:
+            index = self._indices[batch_size]
+            ndx = self._input_indices(index)
+            src = self._data[ndx].values.tolist()
+            src = torch.tensor(src, device=self.device, dtype=torch.float)
+            src = src.reshape(self.observation_length, 1, len(self._columns))
+            time = self._data[self.time_column].iloc[ndx].values.tolist()
+            time = torch.tensor(time, device=self.device, dtype=torch.int)
+            time = time.reshape(self._prediction_length, 1, len(self.time_column))
+            return src, time
+        elif type(batch_size) == slice:
+            batch_indices = batch_size
+            chunk_src = []
+            time_chunk_data = []
+            for index in self._indices[batch_indices]:
+                ndx = self._input_indices(index)
+                chunk_src.append(self._data[self._columns].iloc[ndx].values.tolist())
+                time_chunk_data.append(self._data[self.time_column].iloc[ndx].values.tolist())
+
+            return (
+                torch.tensor(chunk_src, device=self.device, dtype=torch.float).transpose(0, 1),
+                torch.tensor(time_chunk_data, device=self.device, dtype=torch.int).transpose(0, 1),
+            )
