@@ -178,7 +178,7 @@ class Dataset:
             inputs = df = self._data[index : index + self.observation_length]
         return inputs
 
-    def revert(self, values, ndx, is_tgt=False):
+    def revert(self, values, ndx, is_tgt=False, columns=None):
         r_data = values
         indices = self.get_actual_index(ndx)
         if is_tgt:
@@ -199,7 +199,7 @@ class Dataset:
                 else:
                     params = {}
                     if process.kinds == fprocess.MinMaxPreProcess.kinds:
-                        r_data = process.revert(r_data)
+                        r_data = process.revert(r_data, columns=columns)
                     elif process.kinds == fprocess.SimpleColumnDiffPreProcess.kinds:
                         close_column = process.base_column
                         if p_index > 0:
@@ -216,7 +216,10 @@ class Dataset:
                         base_values = self.org_data[close_column].iloc[base_indices]
                         r_data = process.revert(r_data, base_value=base_values)
                     elif process.kinds == fprocess.DiffPreProcess.kinds:
-                        target_columns = process.columns
+                        if columns is None:
+                            target_columns = process.columns
+                        else:
+                            target_columns = columns
                         if r_index > 0:
                             processes = self.processes[:r_index]
                             required_length = [process.get_minimum_required_length()]
@@ -229,7 +232,7 @@ class Dataset:
                                 required_length = max(required_length)
                                 batch_base_indices = [index - required_length for index in indices]
                                 batch_base_values = pd.DataFrame()
-                                print(f"  apply {[__process.kinds for __process in base_processes]} to revert diff")
+                                #print(f"  apply {[__process.kinds for __process in base_processes]} to revert diff")
                                 for index in batch_base_indices:
                                     target_data = self.org_data[target_columns].iloc[index : index + required_length]
                                     for base_process in base_processes:
@@ -242,7 +245,7 @@ class Dataset:
                         else:
                             base_indices = [index - 1 for index in indices]
                             batch_base_values = self.org_data[target_columns].iloc[base_indices]
-                        r_data = process.revert(r_data, base_values=batch_base_values)
+                        r_data = process.revert(r_data, base_values=batch_base_values, columns=columns)
                     else:
                         raise Exception(f"Not implemented: {process.kinds}")
         return r_data
