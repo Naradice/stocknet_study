@@ -148,11 +148,11 @@ class Dataset:
         pass
 
     def eval(self):
-        self._indices = self.eval_indices
+        self._indices = random.sample(self.eval_indices, k=len(self.eval_indices))
         self.is_training = False
 
     def train(self):
-        self._indices = self.train_indices
+        self._indices = random.sample(self.train_indices, k=len(self.train_indices))
         self.is_training = True
 
     def get_actual_index(self, ndx):
