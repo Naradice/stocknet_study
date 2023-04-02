@@ -252,7 +252,7 @@ class TimeDataset(Dataset):
 
 
 def random_sampling(index, min_index, randomize, split_ratio, observation_length, prediction_length, params=None):
-    length = len(index)
+    length = len(index) - observation_length - prediction_length
     to_index = int(length * split_ratio)
     from_index = min_index
     train_indices = list(range(from_index, to_index))
