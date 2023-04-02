@@ -58,7 +58,7 @@ class Dataset:
             raise Exception(f"date length {length} is less than observation_length {self.observation_length}")
 
         self.train_indices, self.eval_indices = self.index_sampler(
-            index, self._min_index, randomize, split_ratio, self.observation_length, self._prediction_length, split_ratio
+            index, self._min_index, randomize, split_ratio, self.observation_length, self._prediction_length
         )
 
         if self.is_training:
