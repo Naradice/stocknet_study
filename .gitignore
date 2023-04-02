@@ -3,6 +3,6 @@ sandbox.ipynb
 sandbox/
 *.torch
 *.png
-/Models/Data
+Data/
 __pycache__/
 preprocess.json
