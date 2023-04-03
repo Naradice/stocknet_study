@@ -177,6 +177,7 @@ class TimeDataset(Dataset):
         seed=1017,
         is_training=True,
         randomize=True,
+        index_sampler=None
     ):
         """return time data in addition to the columns data
         ((observation_length, CHUNK_SIZE, NUM_FEATURES), ((prediction_length, CHUNK_SIZE, 1)) as (feature_data, time_data) for source and target
@@ -198,7 +199,7 @@ class TimeDataset(Dataset):
             self.time_column = time_column
             columns += self.time_column
 
-        super().__init__(df, columns, observation_length, device, processes, prediction_length, seed, is_training, randomize)
+        super().__init__(df, columns, observation_length, device, processes, prediction_length, seed, is_training, randomize,index_sampler)
 
     def _output_func(self, batch_size):
         if type(batch_size) == int:
