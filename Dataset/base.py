@@ -139,6 +139,13 @@ class Dataset:
     def train(self):
         self._indices = random.sample(self.train_indices, k=len(self.train_indices))
         self.is_training = True
+    
+    def get_index_range(self):
+        return min(self._indices), max(self._indices)
+    
+    def get_date_range(self):
+        min_index, max_index = self.get_index_range()
+        return self._data.index[min_index], self._data.index[max_index]
 
     def get_actual_index(self, ndx):
         inputs = []
