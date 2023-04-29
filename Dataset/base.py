@@ -5,9 +5,10 @@ from collections.abc import Iterable
 import numpy as np
 import pandas as pd
 import torch
+from torch.utils.data import Dataset
 
 
-class Dataset:
+class Dataset(Dataset):
     version = 8
 
     def __init__(
@@ -22,6 +23,7 @@ class Dataset:
         is_training=True,
         randomize=True,
         index_sampler=None,
+        split_ratio=0.8,
     ):
         self.seed(seed)
         self.mm_params = {}
@@ -50,9 +52,9 @@ class Dataset:
         self._data = data
         self._columns = columns
         self._prediction_length = prediction_length
-        self._init_indicies(data.index, randomize)
+        self._init_indicies(data.index, randomize, split_ratio=split_ratio)
 
-    def _init_indicies(self, index, randomize=False, split_ratio=0.7):
+    def _init_indicies(self, index, randomize=False, split_ratio=0.8):
         length = len(index) - self.observation_length - self._prediction_length
         if length <= 0:
             raise Exception(f"date length {length} is less than observation_length {self.observation_length}")
@@ -73,8 +75,8 @@ class Dataset:
         if type(batch_size) == int:
             index = self._indices[batch_size]
             ndx = self.output_indices(index)
-            ans = self._data[self._columns].iloc[ndx].values.tolist()
-            ans = ans.reshape(self._prediction_length + 1, 1, len(self._columns))
+            ans = self._data[self._columns].iloc[ndx].values
+            ans = torch.tensor(ans, device=self.device, dtype=torch.float)
             return ans
         elif type(batch_size) == slice:
             batch_indices = batch_size
@@ -92,9 +94,8 @@ class Dataset:
         if type(batch_size) == int:
             index = self._indices[batch_size]
             ndx = self.input_indices(index)
-            src = self._data[ndx].values.tolist()
+            src = self._data[ndx].values
             src = torch.tensor(src, device=self.device, dtype=torch.float)
-            src = src.reshape(self.observation_length, 1, len(self._columns))
             return src
         elif type(batch_size) == slice:
             batch_indices = batch_size
@@ -139,10 +140,10 @@ class Dataset:
     def train(self):
         self._indices = random.sample(self.train_indices, k=len(self.train_indices))
         self.is_training = True
-    
+
     def get_index_range(self):
         return min(self._indices), max(self._indices)
-    
+
     def get_date_range(self):
         min_index, max_index = self.get_index_range()
         return self._data.index[min_index], self._data.index[max_index]
@@ -184,7 +185,7 @@ class TimeDataset(Dataset):
         seed=1017,
         is_training=True,
         randomize=True,
-        index_sampler=None
+        index_sampler=None,
     ):
         """return time data in addition to the columns data
         ((observation_length, CHUNK_SIZE, NUM_FEATURES), ((prediction_length, CHUNK_SIZE, 1)) as (feature_data, time_data) for source and target
@@ -206,18 +207,14 @@ class TimeDataset(Dataset):
             self.time_column = time_column
             columns += self.time_column
 
-        super().__init__(df, columns, observation_length, device, processes, prediction_length, seed, is_training, randomize,index_sampler)
+        super().__init__(df, columns, observation_length, device, processes, prediction_length, seed, is_training, randomize, index_sampler)
 
     def _output_func(self, batch_size):
         if type(batch_size) == int:
             index = self._indices[batch_size]
             ndx = self.output_indices(index)
             ans = self._data[self._columns].iloc[ndx].values.tolist()
-            ans = torch.tensor(ans, device=self.device, dtype=torch.float)
-            ans.reshape(self._prediction_length, 1, len(self._columns))
             time = self._data[self.time_column].iloc[ndx].values.tolist()
-            time = torch.tensor(time, device=self.device, dtype=torch.int)
-            time = time.reshape(self._prediction_length, 1, len(self.time_column))
             return ans, time
         elif type(batch_size) == slice:
             batch_indices = batch_size
@@ -238,11 +235,7 @@ class TimeDataset(Dataset):
             index = self._indices[batch_size]
             ndx = self.input_indices(index)
             src = self._data[ndx].values.tolist()
-            src = torch.tensor(src, device=self.device, dtype=torch.float)
-            src = src.reshape(self.observation_length, 1, len(self._columns))
             time = self._data[self.time_column].iloc[ndx].values.tolist()
-            time = torch.tensor(time, device=self.device, dtype=torch.int)
-            time = time.reshape(self._prediction_length, 1, len(self.time_column))
             return src, time
         elif type(batch_size) == slice:
             batch_indices = batch_size
