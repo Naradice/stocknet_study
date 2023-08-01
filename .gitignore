@@ -6,3 +6,4 @@ sandbox/
 Data/
 __pycache__/
 preprocess.json
+venv*/
