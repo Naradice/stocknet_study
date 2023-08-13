@@ -19,10 +19,14 @@ class FeatureDataset(Dataset):
         is_training=True,
         randomize=True,
         index_sampler=None,
+        indices=None,
     ):
-        super().__init__(df, columns, observation_length, device, processes, prediction_length, seed, is_training, randomize, index_sampler)
+        super().__init__(
+            df, columns, observation_length, device, processes, prediction_length, seed, is_training, randomize, index_sampler, indices=indices
+        )
 
     def output_indices(self, index):
+        # output overrap with last input
         return slice(index + self.observation_length - 1, index + self.observation_length + self._prediction_length)
 
 
@@ -45,6 +49,7 @@ class TimeFeatureDataset(TimeDataset):
         is_training=True,
         randomize=True,
         index_sampler=None,
+        indices=None,
     ):
         super().__init__(
             df,
@@ -58,6 +63,7 @@ class TimeFeatureDataset(TimeDataset):
             is_training=is_training,
             randomize=randomize,
             index_sampler=None,
+            indices=indices,
         )
 
     def output_indices(self, index):

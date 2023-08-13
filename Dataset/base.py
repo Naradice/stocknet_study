@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 
 
 class Dataset(Dataset):
-    version = 8
+    version = 9
 
     def __init__(
         self,
@@ -24,6 +24,7 @@ class Dataset(Dataset):
         randomize=True,
         index_sampler=None,
         split_ratio=0.8,
+        indices=None,
     ):
         self.seed(seed)
         self.mm_params = {}
@@ -52,7 +53,10 @@ class Dataset(Dataset):
         self._data = data
         self._columns = columns
         self._prediction_length = prediction_length
-        self._init_indicies(data.index, randomize, split_ratio=split_ratio)
+        if indices is None:
+            self._init_indicies(data.index, randomize, split_ratio=split_ratio)
+        else:
+            self._init_indicies_row(indices, randomize, split_ratio=split_ratio)
 
     def _init_indicies(self, index, randomize=False, split_ratio=0.8):
         length = len(index) - self.observation_length - self._prediction_length
@@ -60,6 +64,20 @@ class Dataset(Dataset):
             raise Exception(f"date length {length} is less than observation_length {self.observation_length}")
 
         self.train_indices, self.eval_indices = self.index_sampler(
+            index, self._min_index, randomize, split_ratio, self.observation_length, self._prediction_length
+        )
+
+        if self.is_training:
+            self._indices = self.train_indices
+        else:
+            self._indices = self.eval_indices
+
+    def _init_indicies_row(self, index, randomize=False, split_ratio=0.8):
+        length = len(index) - self.observation_length - self._prediction_length
+        if length <= 0:
+            raise Exception(f"date length {length} is less than observation_length {self.observation_length}")
+
+        self.train_indices, self.eval_indices = random_sampling_row(
             index, self._min_index, randomize, split_ratio, self.observation_length, self._prediction_length
         )
 
@@ -186,6 +204,7 @@ class TimeDataset(Dataset):
         is_training=True,
         randomize=True,
         index_sampler=None,
+        indices=None,
     ):
         """return time data in addition to the columns data
         ((observation_length, CHUNK_SIZE, NUM_FEATURES), ((prediction_length, CHUNK_SIZE, 1)) as (feature_data, time_data) for source and target
@@ -207,7 +226,9 @@ class TimeDataset(Dataset):
             self.time_column = time_column
             columns += self.time_column
 
-        super().__init__(df, columns, observation_length, device, processes, prediction_length, seed, is_training, randomize, index_sampler)
+        super().__init__(
+            df, columns, observation_length, device, processes, prediction_length, seed, is_training, randomize, index_sampler, indices=indices
+        )
 
     def _output_func(self, batch_size):
         if type(batch_size) == int:
@@ -270,6 +291,21 @@ def random_sampling(index, min_index, randomize, split_ratio, observation_length
         eval_indices = random.sample(eval_indices, k=to_index - from_index)
     else:
         eval_indices = eval_indices
+    return train_indices, eval_indices
+
+
+def random_sampling_row(index, min_index, randomize, split_ratio, observation_length, prediction_length, params=None):
+    length = len(index) - observation_length - prediction_length
+    to_index = int(length * split_ratio)
+    train_indices = index[:to_index]
+    if randomize:
+        train_indices = random.sample(train_indices, k=to_index)
+
+    from_index = int(length * split_ratio) + observation_length + prediction_length
+
+    eval_indices = index[from_index:]
+    if randomize:
+        eval_indices = random.sample(eval_indices, k=len(eval_indices))
     return train_indices, eval_indices
 
 

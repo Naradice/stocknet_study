@@ -76,7 +76,7 @@ def revert(dataset, values, ndx, is_tgt=False, columns=None):
                     else:
                         base_indices = [index - 1 for index in indices]
                         batch_base_values = dataset.org_data[target_columns].iloc[base_indices].values
-                    r_data = process.revert(r_data, base_values=batch_base_values, columns=columns)
+                    r_data = process.revert(r_data, base_values=batch_base_values)
                 else:
                     raise Exception(f"Not implemented: {process.kinds}")
     return r_data
