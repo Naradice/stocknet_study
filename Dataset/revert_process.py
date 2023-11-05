@@ -3,13 +3,12 @@ import sys
 
 import pandas as pd
 
-module_path = os.path.abspath("../fprocess")
-sys.path.append(module_path)
-
 try:
-    from fprocess import fprocess
-except ImportError:
     import fprocess
+except ImportError:
+    module_path = os.path.abspath("../fprocess")
+    sys.path.append(module_path)
+    from fprocess import fprocess
 
 
 def revert(dataset, values, ndx, is_tgt=False, columns=None):
