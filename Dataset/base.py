@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 
 
 class Dataset(Dataset):
-    version = 9
+    version = 10
 
     def __init__(
         self,
@@ -25,11 +25,15 @@ class Dataset(Dataset):
         index_sampler=None,
         split_ratio=0.8,
         indices=None,
+        dtype=torch.float,
+        batch_first=False,
     ):
         self.seed(seed)
         self.mm_params = {}
         data = df[columns]
         self.org_data = data
+        self.dtype = dtype
+        self.batch_first = batch_first
         min_length = [1]
         if processes is not None:
             for process in processes:
@@ -94,7 +98,7 @@ class Dataset(Dataset):
             index = self._indices[batch_size]
             ndx = self.output_indices(index)
             ans = self._data[self._columns].iloc[ndx].values
-            ans = torch.tensor(ans, device=self.device, dtype=torch.float)
+            ans = torch.tensor(ans, device=self.device, dtype=self.dtype)
             return ans
         elif type(batch_size) == slice:
             batch_indices = batch_size
@@ -103,7 +107,11 @@ class Dataset(Dataset):
                 ndx = self.output_indices(index)
                 chunk_data.append(self._data[self._columns].iloc[ndx].values.tolist())
 
-            return torch.tensor(chunk_data, device=self.device, dtype=torch.float).transpose(0, 1)
+            ans = torch.tensor(chunk_data, device=self.device, dtype=self.dtype)
+            if self.batch_first:
+                return ans
+            else:
+                return ans.transpose(0, 1)
 
     def input_indices(self, index):
         return slice(index, index + self.observation_length)
@@ -113,7 +121,7 @@ class Dataset(Dataset):
             index = self._indices[batch_size]
             ndx = self.input_indices(index)
             src = self._data[ndx].values
-            src = torch.tensor(src, device=self.device, dtype=torch.float)
+            src = torch.tensor(src, device=self.device, dtype=self.dtype)
             return src
         elif type(batch_size) == slice:
             batch_indices = batch_size
@@ -122,7 +130,11 @@ class Dataset(Dataset):
                 ndx = self.input_indices(index)
                 chunk_src.append(self._data[self._columns].iloc[ndx].values.tolist())
 
-            return torch.tensor(chunk_src, device=self.device, dtype=torch.float).transpose(0, 1)
+            src = torch.tensor(chunk_src, device=self.device, dtype=self.dtype)
+            if self.batch_first:
+                return src
+            else:
+                return src.transpose(0, 1)
 
     def __len__(self):
         return len(self._indices)
@@ -205,6 +217,8 @@ class TimeDataset(Dataset):
         randomize=True,
         index_sampler=None,
         indices=None,
+        dtype=torch.float,
+        batch_first=False,
     ):
         """return time data in addition to the columns data
         ((observation_length, CHUNK_SIZE, NUM_FEATURES), ((prediction_length, CHUNK_SIZE, 1)) as (feature_data, time_data) for source and target
@@ -227,7 +241,19 @@ class TimeDataset(Dataset):
             columns += self.time_column
 
         super().__init__(
-            df, columns, observation_length, device, processes, prediction_length, seed, is_training, randomize, index_sampler, indices=indices
+            df,
+            columns,
+            observation_length,
+            device,
+            processes,
+            prediction_length,
+            seed,
+            is_training,
+            randomize,
+            index_sampler,
+            indices=indices,
+            dtype=dtype,
+            batch_first=batch_first,
         )
 
     def _output_func(self, batch_size):
@@ -246,10 +272,12 @@ class TimeDataset(Dataset):
                 chunk_data.append(self._data[self._columns].iloc[ndx].values.tolist())
                 time_chunk_data.append(self._data[self.time_column].iloc[ndx].values.tolist())
 
-            return (
-                torch.tensor(chunk_data, device=self.device, dtype=torch.float).transpose(0, 1),
-                torch.tensor(time_chunk_data, device=self.device, dtype=torch.int).transpose(0, 1),
-            )
+            ans = (torch.tensor(chunk_data, device=self.device, dtype=self.dtype),)
+            time = (torch.tensor(time_chunk_data, device=self.device, dtype=torch.int),)
+            if self.batch_first:
+                return (ans, time)
+            else:
+                return (ans.transpose(0, 1), time.transpose(0, 1))
 
     def _input_func(self, batch_size):
         if type(batch_size) == int:
@@ -267,10 +295,13 @@ class TimeDataset(Dataset):
                 chunk_src.append(self._data[self._columns].iloc[ndx].values.tolist())
                 time_chunk_data.append(self._data[self.time_column].iloc[ndx].values.tolist())
 
-            return (
-                torch.tensor(chunk_src, device=self.device, dtype=torch.float).transpose(0, 1),
-                torch.tensor(time_chunk_data, device=self.device, dtype=torch.int).transpose(0, 1),
-            )
+            src = torch.tensor(chunk_src, device=self.device, dtype=self.dtype)
+            time = torch.tensor(time_chunk_data, device=self.device, dtype=torch.int)
+
+            if self.batch_first:
+                return (src, time)
+            else:
+                return (src.transpose(0, 1), time.transpose(0, 1))
 
 
 def random_sampling(index, min_index, randomize, split_ratio, observation_length, prediction_length, params=None):
