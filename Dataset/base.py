@@ -219,6 +219,7 @@ class TimeDataset(Dataset):
         indices=None,
         dtype=torch.float,
         batch_first=False,
+        split_ratio=0.8,
     ):
         """return time data in addition to the columns data
         ((observation_length, CHUNK_SIZE, NUM_FEATURES), ((prediction_length, CHUNK_SIZE, 1)) as (feature_data, time_data) for source and target
@@ -252,6 +253,7 @@ class TimeDataset(Dataset):
             randomize,
             index_sampler,
             indices=indices,
+            split_ratio=split_ratio,
             dtype=dtype,
             batch_first=batch_first,
         )
@@ -272,8 +274,8 @@ class TimeDataset(Dataset):
                 chunk_data.append(self._data[self._columns].iloc[ndx].values.tolist())
                 time_chunk_data.append(self._data[self.time_column].iloc[ndx].values.tolist())
 
-            ans = (torch.tensor(chunk_data, device=self.device, dtype=self.dtype),)
-            time = (torch.tensor(time_chunk_data, device=self.device, dtype=torch.int),)
+            ans = torch.tensor(chunk_data, device=self.device, dtype=self.dtype)
+            time = torch.tensor(time_chunk_data, device=self.device, dtype=torch.int)
             if self.batch_first:
                 return (ans, time)
             else:
