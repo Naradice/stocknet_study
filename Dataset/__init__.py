@@ -1,2 +1,2 @@
-from base import Dataset
-from base import TimeDataset
+from .base import Dataset
+from .base import TimeDataset
