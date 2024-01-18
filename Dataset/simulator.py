@@ -1,6 +1,7 @@
 import argparse
+import datetime
+import os
 import random
-import sys
 from collections.abc import Iterable
 
 import numpy as np
@@ -244,7 +245,6 @@ class DeterministicDealerModelV3(DeterministicDealerModelV1):
 
 
 def valid_percentage(value):
-    # カスタムの妥当性確認関数
     fvalue = float(value)
     if 0 <= fvalue <= 1:
         return fvalue
@@ -253,26 +253,90 @@ def valid_percentage(value):
 
 
 def main():
-    # if len(sys.argv) < 2:
-    #     sys.exit(1)
+    output_file_name = f"multiagent_result_{datetime.datetime.timestamp(datetime.datetime.now())}.csv"
 
     parser = argparse.ArgumentParser(description="cretes timeseries data simulated by multi agents.")
+    parser.add_argument("simulation_num", type=int, help="specify how many times run simulations. data length is depends on end_condition value")
+    parser.add_argument(
+        "-ec",
+        "--end_condition",
+        type=str,
+        choices=["seconds", "length"],
+        help="if seconds, simulation end when 0.001 * times over the simulation_num. if length, simulation end when data has the simulation_num length.",
+        default="seconds",
+    )
     parser.add_argument("-o", "--out", type=str, help="path to output a result.", default="./")
-    parser.add_argument("-n", "--num", type=int, help="number of agent", default=300)
+    parser.add_argument("-an", "--agent_num", type=int, help="number of agent", default=300)
     parser.add_argument("-uv", "--upper_volatility", type=float, help="maximum value of volatility", default=0.02)
     parser.add_argument("-lv", "--lower_volatility", type=float, help="minimum value of volatility", default=0.01)
     parser.add_argument("-tu", "--trade_unit", type=float, help="a minimum unit to trade with (pips)", default=0.001)
-    parser.add_argument("-ip", "initial_price", type=float, help="a initial price (not a pips)", default=100)
-    parser.add_argument("-s", "spread", type=float, help="a spread for a simulation", default=1)
-    parser.add_argument("-br", "bull_ratio", type=float, metavar="0.0-1.0", help="represents how many users have bull position")
+    parser.add_argument("-ip", "--initial_price", type=float, help="a initial price (not a pips)", default=100)
+    parser.add_argument("-s", "--spread", type=float, help="a spread for a simulation", default=1)
     parser.add_argument(
-        "-tnm", "time_noise_method", type=str, choices=["none", "uniform", "weighted"], help="method to add a noise to timeindex randomly"
+        "-br", "--bull_ratio", type=valid_percentage, metavar="0.0-1.0", help="represents how many users have bull position", default=0.5
     )
-    parser.add_argument("-mtn", "max_time_noise", type=float, help="specify max value of time noise")
+    parser.add_argument(
+        "-tnm",
+        "--time_noise_method",
+        type=str,
+        choices=["none", "uniform", "weighted"],
+        help="method to add a noise to timeindex randomly",
+        default="weighted",
+    )
+    parser.add_argument("-mtn", "--max_time_noise", type=float, help="specify max value of time noise", default=100)
     args = parser.parse_args()
 
-    # args.arg1
+    simulation_num = int(args.simulation_num)
+    if args.end_condition == "seconds":
+        options = {"total_seconds": simulation_num}
+    else:
+        options = {"length": simulation_num}
+
+    if os.path.isabs(args.out):
+        output_folder_path = args.out
+    else:
+        working_folder = os.getcwd()
+        output_folder_path = os.path.abspath(os.path.join(working_folder, args.out))
+    os.makedirs(output_folder_path, exist_ok=True)
+    output_file_path = os.path.join(output_folder_path, output_file_name)
+
+    agent_num = args.agent_num
+    max_volatility = args.upper_volatility
+    min_volatility = args.lower_volatility
+    trade_unit = args.trade_unit
+    initial_price = args.initial_price
+    spread = args.spread
+    bull_ratio = args.bull_ratio
+    bull_ratio = np.clip(bull_ratio, 0.0, 1.0)
+    num_of_bull = round(agent_num * bull_ratio)
+    num_of_bear = agent_num - num_of_bull
+    agent_positions = [1 for i in range(num_of_bull)]
+    bear_agent_positions = [-1 for i in range(num_of_bear)]
+    agent_positions.extend(bear_agent_positions)
+    time_noise_method = args.time_noise_method
+    if time_noise_method == "none":
+        time_noise_method = None
+    elif time_noise_method == "weighted":
+        time_noise_method = "exp"
+    max_noise_factor = args.max_time_noise
+
+    model = DeterministicDealerModelV3(
+        num_agent=agent_num,
+        max_volatility=max_volatility,
+        min_volatility=min_volatility,
+        trade_unit=trade_unit,
+        initial_price=initial_price,
+        spread=spread,
+        initial_positions=agent_positions,
+        time_noise_method=time_noise_method,
+        max_noise_factor=max_noise_factor,
+    )
+
+    prices, ticks = model.simulate(**options)
+    prices.index = ticks
+
+    prices.to_csv(output_file_path, index=True)
 
 
-if __name__ is "__main__":
+if __name__ == "__main__":
     main()
