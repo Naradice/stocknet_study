@@ -1,4 +1,4 @@
-/.ipynb_checkpoints
+.ipynb_checkpoints
 sandbox.ipynb
 sandbox/
 *.torch
@@ -9,3 +9,4 @@ preprocess.json
 venv*/
 modules/
 TextAnalytics/*/*.csv
+.DS_Store
