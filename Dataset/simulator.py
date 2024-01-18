@@ -19,7 +19,6 @@ class DeterministicDealerModelV1:
         spread=1,
         initial_positions=None,
         tick_time=0.001,
-        experimental=False,
         time_noise_method=None,
         max_noise_factor=1,
     ) -> None:
@@ -58,11 +57,6 @@ class DeterministicDealerModelV1:
         self.tick_time = 0.0
         self.tick_time_unit = tick_time
         self.max_noise_factor = max_noise_factor
-        if experimental is True:
-            self.simulate = self.__freq_advance_simulate
-        else:
-            self.simulate = self.__ref_simulate
-
         if time_noise_method is None:
             self.__get_time_noise = lambda: 1
         elif time_noise_method == "uniform":
@@ -109,57 +103,43 @@ class DeterministicDealerModelV1:
             return self.market_price
         return None
 
-    def __ref_simulate(self, total_seconds=100, length=None):
+    def reset(self):
+        self.market_price = self.__initial_price + self.spread
         self.price_history = [self.market_price]
-        tick_times = [self.tick_time]
-        if isinstance(length, int):
-            while len(self.tick_times) < length:
-                self.tick_time += self.tick_time_unit
-                price = self.contruct()
-                if price is not None:
-                    self.price_history.append(price)
-                    tick_times.append(self.tick_time)
-                else:
-                    self.advance_order_price()
-        else:
-            while self.tick_time < total_seconds:
-                random_span_factor = self.__get_time_noise()
-                self.tick_time += self.tick_time_unit * random_span_factor
-                price = self.contruct()
-                if price is not None:
-                    self.price_history.append(price)
-                    tick_times.append(self.tick_time)
-                else:
-                    self.advance_order_price()
-        price_hist_df = pd.DataFrame(self.price_history, columns=["price"])
-        tick_times = np.asarray(tick_times)
-        self.tick_time = 0
-        return price_hist_df, tick_times
+        self.tick_times = [self.tick_time]
 
-    def __freq_advance_simulate(self, total_seconds=100, length=None):
-        self.price_history = [self.market_price]
-        tick_times = [self.tick_time]
+    def __common_step(self):
+        price = self.contruct()
+        if price is not None:
+            self.price_history.append(price)
+            self.tick_times.append(self.tick_time)
+        else:
+            self.advance_order_price()
+
+    def __add_time_for_length(self):
+        self.tick_time += self.tick_time_unit
+
+    def __add_time_for_ticks(self):
+        random_span_factor = self.__get_time_noise()
+        self.tick_time += self.tick_time_unit * random_span_factor
+
+    def step(self):
+        self.__add_time_for_ticks()
+        self.__common_step()
+
+    def simulate(self, total_seconds=100, length=None):
         if isinstance(length, int):
             while len(self.tick_times) < length:
-                self.tick_time += self.tick_time_unit * random_span_factor
-                self.advance_order_price()
-                price = self.contruct()
-                if price is not None:
-                    self.price_history.append(price)
-                    tick_times.append(self.tick_time)
+                self.__add_time_for_length()
+                self.__common_step()
         else:
             while self.tick_time < total_seconds:
-                random_span_factor = self.__get_time_noise()
-                self.tick_time += self.tick_time_unit * random_span_factor
-                self.advance_order_price()
-                price = self.contruct()
-                if price is not None:
-                    self.price_history.append(price)
-                    tick_times.append(self.tick_time)
+                self.__add_time_for_ticks()
+                self.__common_step()
         price_hist_df = pd.DataFrame(self.price_history, columns=["price"])
-        tick_times = np.asarray(tick_times)
+        self.tick_times = np.asarray(self.tick_times)
         self.tick_time = 0
-        return price_hist_df, tick_times
+        return price_hist_df, self.tick_times.copy()
 
 
 class DeterministicDealerModelV3(DeterministicDealerModelV1):
@@ -173,7 +153,6 @@ class DeterministicDealerModelV3(DeterministicDealerModelV1):
         spread=1,
         initial_positions=None,
         tick_time=0.001,
-        experimental=False,
         time_noise_method=None,
         max_noise_factor=1,
         dealer_sensitive=None,
