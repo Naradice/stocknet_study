@@ -69,6 +69,7 @@ class DeterministicDealerModelV1:
             self.__get_time_noise = time_noise_method
         else:
             raise ValueError("this method is not defined")
+        self.__end = False
 
     def __get_uniform_noise(self):
         random_number = random.uniform(1, self.max_noise_factor)
@@ -122,6 +123,13 @@ class DeterministicDealerModelV1:
     def __add_time_for_ticks(self):
         random_span_factor = self.__get_time_noise()
         self.tick_time += self.tick_time_unit * random_span_factor
+
+    def start(self):
+        while self.__end is False:
+            self.step()
+
+    def end(self):
+        self.__end = True
 
     def step(self):
         self.__add_time_for_ticks()
