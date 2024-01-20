@@ -175,7 +175,6 @@ class DeterministicDealerModelV3(DeterministicDealerModelV1):
             spread,
             initial_positions,
             tick_time,
-            experimental=experimental,
             time_noise_method=time_noise_method,
             max_noise_factor=max_noise_factor,
         )
