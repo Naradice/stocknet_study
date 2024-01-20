@@ -108,6 +108,7 @@ class DeterministicDealerModelV1:
         self.market_price = self.__initial_price + self.spread
         self.price_history = [self.market_price]
         self.tick_times = [self.tick_time]
+        self.__end = False
 
     def __common_step(self):
         price = self.contruct()
