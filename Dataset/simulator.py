@@ -9,6 +9,14 @@ import pandas as pd
 
 
 class DeterministicDealerModelV1:
+    def __get_uniform_noise(self):
+        random_number = random.uniform(1, self.max_noise_factor)
+        return random_number
+
+    def __get_weighted_noise(self):
+        random_number = random.choices(self.__noise_factors, weights=self.__noise_weights)[0]
+        return random_number
+
     def __init__(
         self,
         num_agent,
@@ -70,14 +78,6 @@ class DeterministicDealerModelV1:
         else:
             raise ValueError("this method is not defined")
         self.__end = False
-
-    def __get_uniform_noise(self):
-        random_number = random.uniform(1, self.max_noise_factor)
-        return random_number
-
-    def __get_weighted_noise(self):
-        random_number = random.choices(self.__noise_factors, weights=self.__noise_weights)[0]
-        return random_number
 
     def advance_order_price(self):
         self.agent_df.price += self.agent_df.position * self.agent_df.tend
