@@ -1,8 +1,9 @@
-import argparse
 import datetime
 import os
 import random
+import threading
 from collections.abc import Iterable
+from multiprocessing import Process
 
 import numpy as np
 import pandas as pd
@@ -29,6 +30,8 @@ class DeterministicDealerModelV1:
         tick_time=0.001,
         time_noise_method=None,
         max_noise_factor=1,
+        shared_memory=None,
+        **kwargs,
     ) -> None:
         # min_vol should be greater than 0
         # agent tendency: agent change his order prices based on the tendency
@@ -78,6 +81,8 @@ class DeterministicDealerModelV1:
         else:
             raise ValueError("this method is not defined")
         self.__end = False
+        self.shared_memory = shared_memory
+        self.__thread = None
 
     def advance_order_price(self):
         self.agent_df.price += self.agent_df.position * self.agent_df.tend
@@ -108,7 +113,6 @@ class DeterministicDealerModelV1:
         self.market_price = self.__initial_price + self.spread
         self.price_history = [self.market_price]
         self.tick_times = [self.tick_time]
-        self.__end = False
 
     def __common_step(self):
         price = self.contruct()
@@ -117,6 +121,7 @@ class DeterministicDealerModelV1:
             self.tick_times.append(self.tick_time)
         else:
             self.advance_order_price()
+        return price, self.tick_time
 
     def __add_time_for_length(self):
         self.tick_time += self.tick_time_unit
@@ -125,16 +130,47 @@ class DeterministicDealerModelV1:
         random_span_factor = self.__get_time_noise()
         self.tick_time += self.tick_time_unit * random_span_factor
 
-    def start(self):
+    def __run(self):
         while self.__end is False:
             self.step()
+
+    def __process(self):
+        with self.shared_memory.get_lock():
+            for index in range(len(self.shared_memory)):
+                price, _ = self.step()
+                self.shared_memory[index] = price
+
+    def start(self):
+        if self.shared_memory is None:
+            if self.__thread is not None:
+                if self.__thread.is_alive() is True:
+                    return self.__thread
+                else:
+                    self.__thread = None
+            thread = threading.Thread(target=self.__run)
+            thread.start()
+            self.__thread = thread
+            return thread
+        else:
+            if self.__thread is not None:
+                if self.__thread.is_alive() is True:
+                    return self.__thread
+                else:
+                    self.__thread = None
+            process = Process(target=self.__process)
+            process.start()
+            self.__thread = process
+            return process
 
     def end(self):
         self.__end = True
 
     def step(self):
         self.__add_time_for_ticks()
-        self.__common_step()
+        price, tick = self.__common_step()
+        if price is None:
+            return self.step()
+        return price, tick
 
     def simulate(self, total_seconds=100, length=None):
         if isinstance(length, int):
@@ -168,6 +204,7 @@ class DeterministicDealerModelV3(DeterministicDealerModelV1):
         wma=1,
         dealer_sensitive_min=-3.5,
         dealer_sensitive_max=-1.5,
+        **kwargs,
     ) -> None:
         """_summary_
 
@@ -186,6 +223,7 @@ class DeterministicDealerModelV3(DeterministicDealerModelV1):
             tick_time,
             time_noise_method=time_noise_method,
             max_noise_factor=max_noise_factor,
+            **kwargs,
         )
         self.price_history = [self.market_price]
         self.tick_times = [self.tick_time]
