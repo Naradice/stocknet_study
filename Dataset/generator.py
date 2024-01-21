@@ -176,7 +176,7 @@ class AgentSimulationTrainDataGenerator:
             data = src[index : index + len(indices)]
             srs = pd.Series(data, index=indices)
             df = srs.resample(self.sampler_rule).ohlc().ffill()
-            return df[self.columns].values[self.output_length]
+            return df[self.columns].values[:self.output_length]
         else:
             # wait until simulation output required length
             self.__acquire_data(data_index, len(indices))
