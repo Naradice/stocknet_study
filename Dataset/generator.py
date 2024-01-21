@@ -176,7 +176,7 @@ class AgentSimulationTrainDataGenerator:
             data = src[index : index + len(indices)]
             srs = pd.Series(data, index=indices)
             df = srs.resample(self.sampler_rule).ohlc().ffill()
-            return df[self.columns].values[:self.output_length]
+            return df[self.columns].values[: self.output_length]
         else:
             # wait until simulation output required length
             self.__acquire_data(data_index, len(indices))
@@ -337,6 +337,13 @@ class AgentSimulationWeeklyDataGenerator:
         np.random.seed(worker_seed)
         random.seed(worker_seed)
 
-    def render(self, mode="human", close=False):
-        """ """
-        pass
+    def terminate_subprocess(self):
+        for thread in self.model_threads:
+            if thread is not None:
+                thread.terminate()
+
+    def __del__(self):
+        try:
+            self.terminate_subprocess()
+        except Exception:
+            pass
