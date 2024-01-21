@@ -1,3 +1,4 @@
+import argparse
 import os
 import random
 import time
@@ -8,7 +9,8 @@ import numpy as np
 import pandas as pd
 import torch
 from pandas.tseries.frequencies import to_offset
-from .simulator import DeterministicDealerModelV3
+
+from simulator import DeterministicDealerModelV3
 
 
 class AgentSimulationTrainDataGenerator:
@@ -294,14 +296,19 @@ class AgentSimulationWeeklyDataGenerator:
         config = self.model_configs[model_index]
         price = self.last_prices[model_index]
         config["initial_price"] = price
-        shared_memory = Array(float, required_length)
+        shared_memory = Array("f", required_length)
         config["shared_memory"] = shared_memory
 
         model = DeterministicDealerModelV3(self.agent_num, **config)
         return model, shared_memory
 
+    def __iter__(self):
+        return self
+
     def __next__(self):
         next_index, next_remaining_index = self.__get_next_index(self.remaining_time_index)
+        if next_remaining_index is None:
+            raise StopIteration()
         self.remaining_time_index = next_remaining_index
         for model_index in range(self.model_count):
             if len(self.model_threads) > model_index:
@@ -312,8 +319,10 @@ class AgentSimulationWeeklyDataGenerator:
                     last_timestamp = self.__current_index[-1].timestamp()
                     file_name = f"tickdata_simulation_model{model_index}_{last_timestamp}.csv"
                     working_folder = os.getcwd()
-                    file_path = os.join(working_folder, file_name)
+                    file_path = os.path.join(working_folder, file_name)
                     tick_data.to_csv(file_path)
+                    last_price = tick_data.iloc[-1]
+                    self.last_prices[model_index] = last_price
             model, shared_memory = self.__create_model(model_index, len(next_index))
             thread = model.start()
             self.model_threads[model_index] = thread
@@ -347,3 +356,63 @@ class AgentSimulationWeeklyDataGenerator:
             self.terminate_subprocess()
         except Exception:
             pass
+
+
+def main():
+    parser = argparse.ArgumentParser(description="cretes timeseries data simulated by multi agents.")
+    parser.add_argument("target_file", type=str, help="filepath to read target tick data")
+    parser.add_argument("-c", "--column", type=str, help="column to get initial price", default=None)
+    parser.add_argument("-mn", "--model_num", type=int, help="number of parallel models", default=None)
+    parser.add_argument("-an", "--agent_num", type=int, help="number of agent", default=300)
+    parser.add_argument("-uv", "--upper_volatility", type=float, help="maximum value of volatility", default=0.02)
+    parser.add_argument("-lv", "--lower_volatility", type=float, help="minimum value of volatility", default=0.01)
+    parser.add_argument("-tu", "--trade_unit", type=float, help="a minimum unit to trade with (pips)", default=0.001)
+    parser.add_argument("-s", "--spread", type=float, help="a spread for a simulation", default=1)
+    parser.add_argument("-br", "--bull_ratio", metavar="0.0-1.0", help="represents how many users have bull position", default=0.5)
+    parser.add_argument("-mtn", "--max_time_noise", type=float, help="specify max value of time noise", default=100)
+    args = parser.parse_args()
+
+    file = args.target_file
+    column = args.column
+    df = pd.read_csv(file, index_col=0, parse_dates=True)
+    timeindex = df.index
+    if column is None:
+        initial_price = 100.0
+    elif column in df.columns:
+        initial_price = df[column].iloc[0]
+    else:
+        raise ValueError(f"column {column} is not in file")
+    del df
+
+    model_num = args.model_num
+    agent_num = args.agent_num
+    max_volatility = args.upper_volatility
+    min_volatility = args.lower_volatility
+    trade_unit = args.trade_unit
+    spread = args.spread
+    bull_ratio = args.bull_ratio
+    bull_ratio = np.clip(bull_ratio, 0.0, 1.0)
+    num_of_bull = round(agent_num * bull_ratio)
+    num_of_bear = agent_num - num_of_bull
+    agent_positions = [1 for i in range(num_of_bull)]
+    bear_agent_positions = [-1 for i in range(num_of_bear)]
+    agent_positions.extend(bear_agent_positions)
+
+    config = {
+        "max_volatility": max_volatility,
+        "min_volatility": min_volatility,
+        "trade_unit": trade_unit,
+        "spread": spread,
+        "initial_positions": agent_positions,
+    }
+
+    generator = AgentSimulationWeeklyDataGenerator(
+        agent_per_model=agent_num, model_count=model_num, timeindex=timeindex, initial_price=initial_price, model_configs=config
+    )
+
+    for _ in generator:
+        pass
+
+
+if __name__ == "__main__":
+    main()

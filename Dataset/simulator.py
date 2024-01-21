@@ -11,11 +11,11 @@ import pandas as pd
 
 
 class DeterministicDealerModelV1:
-    def __get_uniform_noise(self):
+    def _get_uniform_noise(self):
         random_number = random.uniform(1, self.max_noise_factor)
         return random_number
 
-    def __get_weighted_noise(self):
+    def _get_weighted_noise(self):
         random_number = random.choices(self.__noise_factors, weights=self.__noise_weights)[0]
         return random_number
 
@@ -70,13 +70,13 @@ class DeterministicDealerModelV1:
         self.tick_time_unit = tick_time
         self.max_noise_factor = max_noise_factor
         if time_noise_method is None:
-            self.__get_time_noise = lambda: 1
+            self.__get_time_noise = self._get_uniform_noise
         elif time_noise_method == "uniform":
-            self.__get_time_noise = self.__get_uniform_noise
+            self.__get_time_noise = self._get_uniform_noise
         elif time_noise_method == "exp":
             self.__noise_factors = list(range(1, self.max_noise_factor + 1))
             self.__noise_weights = [1 / (i + 1) for i in range(self.max_noise_factor)]
-            self.__get_time_noise = self.__get_weighted_noise
+            self.__get_time_noise = self._get_weighted_noise
         elif callable(time_noise_method) is True:
             self.__get_time_noise = time_noise_method
         else:
@@ -115,7 +115,7 @@ class DeterministicDealerModelV1:
         self.price_history = [self.market_price]
         self.tick_times = [self.tick_time]
 
-    def __common_step(self):
+    def _common_step(self):
         price = self.contruct()
         if price is not None:
             self.price_history.append(price)
@@ -127,7 +127,7 @@ class DeterministicDealerModelV1:
     def __add_time_for_length(self):
         self.tick_time += self.tick_time_unit
 
-    def __add_time_for_ticks(self):
+    def _add_time_for_ticks(self):
         random_span_factor = self.__get_time_noise()
         self.tick_time += self.tick_time_unit * random_span_factor
 
@@ -135,7 +135,7 @@ class DeterministicDealerModelV1:
         while self.__end is False:
             self.step()
 
-    def __process(self):
+    def _process(self):
         with self.shared_memory.get_lock():
             for index in range(len(self.shared_memory)):
                 price, _ = self.step()
@@ -158,7 +158,7 @@ class DeterministicDealerModelV1:
                     return self.__thread
                 else:
                     self.__thread = None
-            process = Process(target=self.__process)
+            process = Process(target=self._process)
             process.start()
             self.__thread = process
             return process
@@ -167,8 +167,8 @@ class DeterministicDealerModelV1:
         self.__end = True
 
     def step(self):
-        self.__add_time_for_ticks()
-        price, tick = self.__common_step()
+        self._add_time_for_ticks()
+        price, tick = self._common_step()
         if price is None:
             return self.step()
         return price, tick
@@ -177,11 +177,11 @@ class DeterministicDealerModelV1:
         if isinstance(length, int):
             while len(self.tick_times) < length:
                 self.__add_time_for_length()
-                self.__common_step()
+                self._common_step()
         else:
             while self.tick_time < total_seconds:
-                self.__add_time_for_ticks()
-                self.__common_step()
+                self._add_time_for_ticks()
+                self._common_step()
         price_hist_df = pd.DataFrame(self.price_history, columns=["price"])
         self.tick_times = np.asarray(self.tick_times)
         self.tick_time = 0
