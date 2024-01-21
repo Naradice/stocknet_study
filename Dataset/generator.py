@@ -7,6 +7,7 @@ from multiprocessing import cpu_count, Array, Pipe, Process
 import numpy as np
 import pandas as pd
 import torch
+from pandas.tseries.frequencies import to_offset
 from .simulator import DeterministicDealerModelV3
 
 
@@ -14,15 +15,14 @@ class AgentSimulationTrainDataGenerator:
     def __init__(
         self,
         agent_per_model: int,
-        total_seconds: int,
+        output_length: int,
         sample_timeindex,
         model_config=None,
         model_count: int = None,
         sampler_rule="MIN",
         batch_size=32,
-        device="cuda",
+        device=None,
         processes=None,
-        prediction_length=10,
         seed=1017,
         is_training=True,
         dtype=torch.float,
@@ -38,8 +38,6 @@ class AgentSimulationTrainDataGenerator:
             raise TypeError("model_count should be int.")
         if model_count <= 0:
             raise ValueError("model_count should be greater than 0.")
-        if total_seconds <= 0:
-            raise ValueError("total_seconds should be greater than 0.")
         if agent_per_model <= 1:
             raise ValueError("total_seconds should be greater than 1.")
         if model_config is None:
@@ -57,6 +55,15 @@ class AgentSimulationTrainDataGenerator:
             self.columns = columns
         else:
             raise ValueError("any of ohlc column is required.")
+        try:
+            self.max_delta = pd.to_timedelta(to_offset(sampler_rule))
+            self.total_seconds = output_length * self.max_delta.total_seconds()
+            self.output_length = output_length
+        except Exception as e:
+            raise ValueError(f"sampler_rule should be available as sampler rule: {e}")
+        if device is None:
+            device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+
         pipes = []
         cpu_processes = []
         batch_sizes = []
@@ -79,19 +86,16 @@ class AgentSimulationTrainDataGenerator:
 
         try:
             self.seed(seed)
-            self.total_seconds = total_seconds
-
             self.dtype = dtype
             self.batch_first = batch_first
             self.processes = processes
             self.is_training = is_training
             self.device = device
-            self._prediction_length = prediction_length
             self.data = None
             self.row_data = None
             self.sample_timemindex = sample_timeindex
-            last_available_time = sample_timeindex[-1] - pd.Timedelta(seconds=total_seconds)
-            available_timeindex = sample_timeindex[sample_timeindex <= last_available_time]
+            last_available_time = sample_timeindex[-1] - pd.Timedelta(seconds=self.total_seconds)
+            available_timeindex = sample_timeindex[sample_timeindex < last_available_time]
             self.__max_index_to_use = len(available_timeindex)
             self.sampler_rule = sampler_rule
             # self.used_indices = []
@@ -144,19 +148,23 @@ class AgentSimulationTrainDataGenerator:
         self.__refresh_data()
         return self
 
-    def __get_next_indices(self):
+    def get_next_indices(self):
         selected_index = random.randint(0, self.__max_index_to_use)
         time_indices = self.sample_timemindex[selected_index:]
         end_time = time_indices[0] + pd.Timedelta(seconds=self.total_seconds)
         next_indices = time_indices[time_indices <= end_time]
+        # check if data has sufficient length.
+        delta = end_time - next_indices[-1]
+        if delta > self.max_delta:
+            return self.get_next_indices()
         # check if indices includes holiday.
         time_diffs = (next_indices[1:] - next_indices[:-1]).total_seconds()
         org_length = len(time_diffs)
-        out_condition = 3600 * 23
+        out_condition = 3600
         time_diffs = time_diffs[time_diffs <= out_condition]
-        # since simulation assume continuous trading, skip this index
+        # since simulation assume continuous trading, skip this index.
         if len(time_diffs) != org_length:
-            return self.__get_next_indices()
+            return self.get_next_indices()
         # self.used_index.append(selected_value)
         return next_indices
 
@@ -168,7 +176,7 @@ class AgentSimulationTrainDataGenerator:
             data = src[index : index + len(indices)]
             srs = pd.Series(data, index=indices)
             df = srs.resample(self.sampler_rule).ohlc().ffill()
-            return df[self.columns].values.tolist()
+            return df[self.columns].values[self.output_length]
         else:
             # wait until simulation output required length
             self.__acquire_data(data_index, len(indices))
@@ -177,7 +185,7 @@ class AgentSimulationTrainDataGenerator:
     def __get_batch_observations(self):
         indices_array = []
         for _ in range(self.max_mini_batch):
-            indices = self.__get_next_indices()
+            indices = self.get_next_indices()
             indices_array.append(indices)
 
         batch_src = []
@@ -216,6 +224,12 @@ class AgentSimulationTrainDataGenerator:
     def render(self, mode="human", close=False):
         """ """
         pass
+
+    def __del__(self):
+        try:
+            self.terminate_subprocess()
+        except Exception:
+            pass
 
 
 class AgentSimulationWeeklyDataGenerator:
