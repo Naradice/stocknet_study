@@ -295,6 +295,7 @@ class AgentSimulationWeeklyDataGenerator:
             next_date = self.week_head_times[self.current_head_index + 1]
             next_index = remaining_time_index[remaining_time_index < next_date]
             remaining_time_index = remaining_time_index[remaining_time_index >= next_date]
+            self.current_head_index += 1
             return next_index, remaining_time_index
         else:
             # last step. return remining indices
@@ -333,7 +334,7 @@ class AgentSimulationWeeklyDataGenerator:
                     file_path = os.path.join(working_folder, file_name)
                     tick_data.to_csv(file_path)
                     last_price = tick_data.iloc[-1]
-                    self.last_prices[model_index] = last_price
+                    self.last_prices[model_index] = float(last_price)
                     thread.close()
                     del shared_memory
             model, shared_memory = self.__create_model(model_index, len(next_index))
