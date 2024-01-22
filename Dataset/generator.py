@@ -57,9 +57,18 @@ class AgentSimulationTrainDataGenerator:
             self.columns = columns
         else:
             raise ValueError("any of ohlc column is required.")
+        required_length = 0
+        if processes is not None:
+            min_length = []
+            for process in processes:
+                min_length.append(process.get_minimum_required_length())
+            required_length = max(min_length)
+        else:
+            processes = []
+        self.processes = processes
         try:
             self.max_delta = pd.to_timedelta(to_offset(sampler_rule))
-            self.total_seconds = output_length * self.max_delta.total_seconds()
+            self.total_seconds = (output_length + required_length) * self.max_delta.total_seconds()
             self.output_length = output_length
         except Exception as e:
             raise ValueError(f"sampler_rule should be available as sampler rule: {e}")
@@ -90,7 +99,6 @@ class AgentSimulationTrainDataGenerator:
             self.seed(seed)
             self.dtype = dtype
             self.batch_first = batch_first
-            self.processes = processes
             self.is_training = is_training
             self.device = device
             self.data = None
@@ -178,7 +186,9 @@ class AgentSimulationTrainDataGenerator:
             data = src[index : index + len(indices)]
             srs = pd.Series(data, index=indices)
             df = srs.resample(self.sampler_rule).ohlc().ffill()
-            return df[self.columns].values[: self.output_length]
+            for process in self.processes:
+                df = process(df)
+            return df[self.columns].values[-self.output_length :].tolist()
         else:
             # wait until simulation output required length
             self.__acquire_data(data_index, len(indices))
