@@ -316,7 +316,7 @@ class AgentSimulationWeeklyDataGenerator:
                 if thread is not None:
                     thread.join()
                     shared_memory = self.model_outputs[model_index]
-                    tick_data = pd.Series(shared_memory.get_obj(), index=self.__current_index)
+                    tick_data = pd.Series(list(shared_memory.get_obj()), index=self.__current_index)
                     last_timestamp = self.__current_index[-1].timestamp()
                     file_name = f"tickdata_simulation_model{model_index}_{last_timestamp}.csv"
                     working_folder = os.getcwd()
@@ -324,6 +324,8 @@ class AgentSimulationWeeklyDataGenerator:
                     tick_data.to_csv(file_path)
                     last_price = tick_data.iloc[-1]
                     self.last_prices[model_index] = last_price
+                    thread.close()
+                    del shared_memory
             model, shared_memory = self.__create_model(model_index, len(next_index))
             thread = model.start()
             self.model_threads[model_index] = thread
