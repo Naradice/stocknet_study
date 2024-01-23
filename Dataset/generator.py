@@ -47,8 +47,11 @@ class AgentSimulationTrainDataGenerator:
             raise ValueError("total_seconds should be greater than 1.")
         if model_config is None:
             model_config = {}
-        if isinstance(model_config, Iterable) and len(model_config) == model_count:
-            model_configs = model_config
+        if isinstance(model_config, Iterable) is True:
+            if len(model_config) == model_count:
+                model_configs = model_config
+            else:
+                raise ValueError("model_count should be the same as length of model configs.")
         elif isinstance(model_config, dict):
             model_configs = [model_config for _ in range(model_count)]
         else:
