@@ -291,7 +291,7 @@ class AgentSimulationWeeklyDataGenerator:
         self.current_head_index = 0
 
     def __get_next_index(self, remaining_time_index):
-        if len(self.week_head_times) > self.current_head_index:
+        if len(self.week_head_times) > (self.current_head_index - 1):
             next_date = self.week_head_times[self.current_head_index + 1]
             next_index = remaining_time_index[remaining_time_index < next_date]
             remaining_time_index = remaining_time_index[remaining_time_index >= next_date]
