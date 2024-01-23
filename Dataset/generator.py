@@ -10,7 +10,10 @@ import pandas as pd
 import torch
 from pandas.tseries.frequencies import to_offset
 
-from simulator import DeterministicDealerModelV3
+try:
+    from simulator import DeterministicDealerModelV3
+except ModuleNotFoundError:
+    from .simulator import DeterministicDealerModelV3
 
 
 class AgentSimulationTrainDataGenerator:
