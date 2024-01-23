@@ -44,6 +44,12 @@ class AgentSimulationTrainDataGenerator:
             raise ValueError("total_seconds should be greater than 1.")
         if model_config is None:
             model_config = {}
+        if isinstance(model_config, Iterable) and len(model_config) == model_count:
+            model_configs = model_config
+        elif isinstance(model_config, dict):
+            model_configs = [model_config for _ in range(model_count)]
+        else:
+            raise TypeError(f"{type(model_config)} is not supported as model_config")
         columns = []
         if open is True:
             columns.append("open")
@@ -80,6 +86,7 @@ class AgentSimulationTrainDataGenerator:
         batch_sizes = []
         mini_batch = int(batch_size / model_count)
         for i in range(model_count):
+            model_config = model_configs[i]
             model = DeterministicDealerModelV3(agent_per_model, **model_config)
             parent_pipe, child_pipe = Pipe()
             process = Process(target=self.__child_process, args=(child_pipe, model))
