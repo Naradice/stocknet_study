@@ -281,7 +281,7 @@ def valid_percentage(value):
 def main():
     output_file_name = f"multiagent_result_{datetime.datetime.timestamp(datetime.datetime.now())}.csv"
 
-    parser = argparse.ArgumentParser(description="cretes timeseries data simulated by multi agents.")
+    parser = argparse.ArgumentParser(description="creates timeseries data simulated by multi agents.")
     parser.add_argument("simulation_num", type=int, help="specify how many times run simulations. data length is depends on end_condition value")
     parser.add_argument(
         "-ec",
