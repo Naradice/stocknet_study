@@ -1,6 +1,8 @@
 import argparse
+import datetime
 import os
 import random
+import sys
 import time
 from collections.abc import Iterable
 from multiprocessing import cpu_count, Array, Pipe, Process
@@ -14,6 +16,13 @@ try:
     from simulator import DeterministicDealerModelV3
 except ModuleNotFoundError:
     from .simulator import DeterministicDealerModelV3
+
+try:
+    from fprocess import fprocess
+except ImportError:
+    module_path = os.path.abspath("../fprocess")
+    sys.path.append(module_path)
+    from fprocess import fprocess
 
 
 class AgentSimulationTrainDataGenerator:
@@ -90,6 +99,7 @@ class AgentSimulationTrainDataGenerator:
         pipes = []
         cpu_processes = []
         batch_sizes = []
+        self.target_batch_size = batch_size
         mini_batch = int(batch_size / model_count)
         for i in range(model_count):
             model_config = model_configs[i]
@@ -107,6 +117,8 @@ class AgentSimulationTrainDataGenerator:
         self.cp = cpu_processes
         self.batch_sizes = batch_sizes
         self.max_mini_batch = max(self.batch_sizes)
+        self.added_data = []
+        self.additioan_batch_sizes = []
 
         try:
             self.seed(seed)
@@ -207,6 +219,12 @@ class AgentSimulationTrainDataGenerator:
             self.__acquire_data(data_index, len(indices))
             return self.__get_a_observation(data_index, indices)
 
+    def __get_additional_observation(self, data_index):
+        """get observation from separately added data. Typically it is added from saved simulation data."""
+        src_df = self.added_data[data_index]
+        index = random.randint(0, len(src_df) - self.output_length)
+        return src_df.iloc[index : index + self.output_length].values.tolist()
+
     def __get_batch_observations(self):
         indices_array = []
         for _ in range(self.max_mini_batch):
@@ -219,6 +237,11 @@ class AgentSimulationTrainDataGenerator:
                 indices = indices_array[index]
                 src = self.__get_a_observation(data_index, indices)
                 batch_src.append(src)
+
+        for data_index, mini_batch_size in enumerate(self.additioan_batch_sizes):
+            for _ in range(mini_batch_size):
+                src = self.__get_additional_observation(data_index)
+                batch_src.append(src)
         return batch_src
 
     def __next__(self):
@@ -228,6 +251,40 @@ class AgentSimulationTrainDataGenerator:
             return obs
         else:
             return obs.transpose(0, 1)
+
+    def _convert_tick_to_ohlc(self, tick_data: pd.Series):
+        ohlc_df = tick_data.resample(self.sampler_rule).ohlc()
+        ohlc_df = fprocess.convert.dropna_market_close(ohlc_df).ffill()
+        for process in self.processes:
+            ohlc_df = process(ohlc_df)
+        return ohlc_df
+
+    def _update_batch_sizes(self):
+        model_count = len(self.pipes)
+        additional_data_count = len(self.added_data)
+
+        # define batch sizes based on two params
+        mini_batch = int(self.target_batch_size / (model_count + additional_data_count))
+        self.batch_sizes = [mini_batch for _ in range(model_count)]
+        self.max_mini_batch = mini_batch
+        self.additioan_batch_sizes = []
+        for i in range(additional_data_count):
+            if i == additional_data_count - 1:
+                mini_batch = self.target_batch_size - mini_batch * (model_count + i)
+            self.additioan_batch_sizes.append(mini_batch)
+
+    def add_data(self, tick_data: pd.Series):
+        ohlc_df = self._convert_tick_to_ohlc(tick_data)
+        # try if column has specified values
+        self.added_data.append(ohlc_df[self.columns].copy())
+        self._update_batch_sizes()
+
+    def add_multiple_data(self, tick_data: list):
+        for tick_srs in tick_data:
+            ohlc_df = self._convert_tick_to_ohlc(tick_srs)
+            # try if column has specified values
+            self.added_data.append(ohlc_df[self.columns].copy())
+        self._update_batch_sizes()
 
     def seed(self, seed=None):
         """ """
@@ -249,6 +306,17 @@ class AgentSimulationTrainDataGenerator:
     def render(self, mode="human", close=False):
         """ """
         pass
+
+    def save_ticks(self, data_folder):
+        try:
+            self.__refresh_data()
+        except Exception:
+            pass
+        date_str = datetime.datetime.now().isoformat()
+        os.makedirs(data_folder, exist_ok=True)
+        for index, data in enumerate(self.row_data):
+            sim_srs = pd.Series(data, index=self.sample_timemindex[: len(data)])
+            sim_srs.to_csv(f"{data_folder}/tickdata_simulation_{date_str}_model_{index}.csv")
 
     def __del__(self):
         try:
