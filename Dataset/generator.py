@@ -2,7 +2,6 @@ import argparse
 import datetime
 import os
 import random
-import sys
 import time
 from collections.abc import Iterable
 from multiprocessing import cpu_count, Array, Pipe, Process
@@ -18,10 +17,8 @@ except ModuleNotFoundError:
     from .simulator import DeterministicDealerModelV3
 
 try:
-    from fprocess import fprocess
+    import fprocess
 except ImportError:
-    module_path = os.path.abspath("../fprocess")
-    sys.path.append(module_path)
     from fprocess import fprocess
 
 

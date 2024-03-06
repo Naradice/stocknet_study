@@ -25,6 +25,7 @@ def save_checkpoint(model_path, model, optimizer, scheduler, best_loss, **kwargs
         },
         model_path,
     )
+    print(f"model checkpoint saved at {model_path}")
 
 
 def load_model_params(model_folder, model_name, model_version, storage_handler=None):
@@ -179,8 +180,9 @@ class Logger:
     def __store_files_to_cloud_storage(self, file_path):
         try:
             self.__cloud_handler.upload_training_results(self.model_name, [file_path])
+            print("file uploaded to cloud storage ")
         except Exception as e:
-            print(f"failed to save logs to dropbox: {e}")
+            print(f"failed to save logs to cloud storage: {e}")
 
     def reset(self, model_name=None, file_name=None):
         if file_name is None:
@@ -240,7 +242,7 @@ class Logger:
         if model is not None:
             data_folder = os.path.dirname(self.log_file_path)
             model_path = os.path.join(data_folder, f"{model_name}_v{model_version}.torch")
-            save_checkpoint(model_path, model, optimizer, scheduler, best_loss, kwargs)
+            save_checkpoint(model_path, model, optimizer, scheduler, best_loss, **kwargs)
             if self.__use_cloud_storage:
                 self.__store_files_to_cloud_storage(model_path)
 
