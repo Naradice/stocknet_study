@@ -178,7 +178,10 @@ class AgentSimulationTrainDataGenerator:
             self.__acquire_data(data_index, required_length)
 
     def __iter__(self):
-        self.__refresh_data()
+        try:
+            self.__refresh_data()
+        except Exception:
+            raise StopIteration
         return self
 
     def get_next_indices(self):
@@ -243,7 +246,10 @@ class AgentSimulationTrainDataGenerator:
         return batch_src
 
     def __next__(self):
-        batch_data = self.__get_batch_observations()
+        try:
+            batch_data = self.__get_batch_observations()
+        except Exception:
+            raise StopIteration
         obs = torch.tensor(batch_data, dtype=self.dtype, device=self.device)
         if self.batch_first is True:
             return obs
