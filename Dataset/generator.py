@@ -102,7 +102,7 @@ class AgentSimulationTrainDataGenerator:
             model_config = model_configs[i]
             model = DeterministicDealerModelV3(agent_per_model, **model_config)
             parent_pipe, child_pipe = Pipe()
-            process = Process(target=self.__child_process, args=(child_pipe, model))
+            process = Process(target=self._child_process, args=(child_pipe, model))
             process.start()
             pipes.append(parent_pipe)
             cpu_processes.append(process)
@@ -135,7 +135,8 @@ class AgentSimulationTrainDataGenerator:
             self.terminate_subprocess()
             raise e
 
-    def __child_process(self, pipe, model):
+    @staticmethod
+    def _child_process(pipe, model):
         command = 0
         thread = model.start()
         while command != -1:
@@ -305,10 +306,8 @@ class AgentSimulationTrainDataGenerator:
         pass
 
     def save_ticks(self, data_folder):
-        try:
-            self.__refresh_data()
-        except Exception:
-            pass
+        self.__refresh_data()
+        print("data is updated.")
         date_str = datetime.datetime.now().isoformat()
         os.makedirs(data_folder, exist_ok=True)
         for index, data in enumerate(self.row_data):
