@@ -261,6 +261,7 @@ class AgentSimulationTrainDataGenerator:
         ohlc_df = fprocess.convert.dropna_market_close(ohlc_df).ffill()
         for process in self.processes:
             ohlc_df = process(ohlc_df)
+        ohlc_df.dropna(inplace=True)
         return ohlc_df
 
     def _update_batch_sizes(self):
@@ -311,9 +312,10 @@ class AgentSimulationTrainDataGenerator:
         """ """
         pass
 
-    def save_ticks(self, data_folder):
-        self.__refresh_data()
-        print("data is updated.")
+    def save_ticks(self, data_folder, data_update_required=True):
+        if data_update_required:
+            self.__refresh_data()
+            print("data is updated.")
         date_str = datetime.datetime.now().isoformat()
         os.makedirs(data_folder, exist_ok=True)
         for index, data in enumerate(self.row_data):
