@@ -84,11 +84,12 @@ def load_model_checkpoint(
         if storage_handler is None:
             print("exsisting model not found.")
             return default_response
-    file_name = os.path.basename(model_path)
-    response = storage_handler.download_file(f"/{model_name}/{file_name}", model_path)
-    if response is None:
-        print("exsisting model not found.")
-        return default_response
+        else:
+            file_name = os.path.basename(model_path)
+            response = storage_handler.download_file(f"/{model_name}/{file_name}", model_path)
+            if response is None:
+                print("exsisting model not found.")
+                return default_response
 
     if torch.cuda.is_available():
         check_point = torch.load(model_path)
