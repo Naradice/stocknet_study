@@ -316,7 +316,8 @@ class AgentSimulationTrainDataGenerator:
         if data_update_required:
             self.__refresh_data()
             print("data is updated.")
-        date_str = datetime.datetime.now().isoformat()
+        date_str = datetime.datetime.now().isoformat(timespec="hours")
+        date_str = date_str.replace(":", "-")
         os.makedirs(data_folder, exist_ok=True)
         for index, data in enumerate(self.row_data):
             sim_srs = pd.Series(data, index=self.sample_timemindex[: len(data)])
