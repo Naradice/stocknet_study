@@ -104,11 +104,11 @@ def load_model_checkpoint(
         else:
             print("best_loss not found.")
             best_loss = np.inf
-        return params, model, optimizer, scheduler, best_loss
+        return True, params, model, optimizer, scheduler, best_loss
     else:
         print("checkpoint is not available.")
         model.load_state_dict(check_point)
-        return params, model, None, None, np.inf
+        return True, params, model, None, None, np.inf
 
 
 class Logger:
