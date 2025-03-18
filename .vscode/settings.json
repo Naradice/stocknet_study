@@ -1,7 +1,9 @@
 {
   "editor.formatOnSave": true,
   "python.formatting.provider": "black",
-  "python.formatting.blackArgs": ["--line-length=150"],
+  "python.formatting.blackArgs": [
+    "--line-length=150"
+  ],
   "python.linting.flake8Args": [
     "--max-line-length=130"
   ],

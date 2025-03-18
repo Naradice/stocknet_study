@@ -6,7 +6,13 @@ sandbox/
 Data/
 __pycache__/
 preprocess.json
-venv*/
+*venv*/
 modules/
+FeatureEngineering/*.csv
+Models/GNN/*.csv
 TextAnalytics/*/*.csv
 .DS_Store
+Models/*/*.json
+Models/*/*.csv
+Models/*/*.torch
+Models/*/*.log
