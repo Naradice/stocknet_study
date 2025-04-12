@@ -115,6 +115,12 @@ class Logger:
 
   def save_params(self, params:dict, model_name=None, model_version=None):
     data_folder = os.path.dirname(self.log_file_path)
+    if model_name is None:
+      model_name = self.model_name
+    if model_version is None:
+      model_version = self.version
+    if not os.path.exists(data_folder):
+      os.makedirs(data_folder)
     param_file_path = os.path.join(data_folder, f'{model_name}_v{model_version}_params.json')
     with open(param_file_path, mode="w") as fp:
       json.dump(params, fp)
@@ -124,6 +130,12 @@ class Logger:
   def save_model(self, model, model_name=None, model_version=None):
     if model is not None:
       data_folder = os.path.dirname(self.log_file_path)
+      if model_name is None:
+        model_name = self.model_name
+      if model_version is None:
+        model_version = self.version
+      if not os.path.exists(data_folder):
+        os.makedirs(data_folder)
       param_file_path = os.path.join(data_folder, f'{model_name}_v{model_version}.torch')
       torch.save(model.state_dict(), param_file_path)
       if self.__use_cloud_storage:
